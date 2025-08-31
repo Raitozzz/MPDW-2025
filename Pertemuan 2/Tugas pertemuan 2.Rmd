@@ -1,5 +1,5 @@
 ---
-title: "nyoba"
+title: "Tugas Praktikum Pertemuan 2"
 author: "Rahmandani"
 date: "2025-08-31"
 output: html_document
@@ -10,6 +10,47 @@ knitr::opts_chunk$set(echo = TRUE)
 ```
 
 
+```{r}
+data_btc = read.csv("C:/Users/PC/Downloads/btc_historical_price.csv")
+
+data_btc = data_btc[829:1656,]
+View(data_btc)
+dim(data_btc)
+```
+
+```{r}
+library("forecast")
+library("graphics")
+library("TTR")
+library("TSA")
+library("ggplot2")
+```
+
+```{r}
+data_btc.ts= ts(data_btc$price)
+summary(data_btc.ts)
+
+ts.plot(btc_harga, xlab="Time period", ylab="price", main = "plot harga bitcoin data dani")
+```
+
+```{r}
+jumlah_data = nrow(data_btc)
+
+n_data_train = floor(0.75 * jumlah_data)
+
+train_data = data_btc[1:n_data_train, ]
+test_data  = data_btc[(n_data_train+1):jumlah_data, ]
+
+
+train_data.ts = ts(train_data$price)
+test_data.ts = ts(test_data$price)
+```
+
+```{r}
+plot(data_btc.ts, col="light blue", main = "plot all btc")
+plot(train_data.ts, col= "light blue",main="plot train")
+plot(test_data.ts, col = "light blue", main = "plot test")
+```
 ```{r}
 
 ```
