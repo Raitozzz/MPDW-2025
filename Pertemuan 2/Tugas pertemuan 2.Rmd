@@ -11,9 +11,9 @@ knitr::opts_chunk$set(echo = TRUE)
 
 
 ```{r}
-data_btc = read.csv("C:/Users/PC/Downloads/btc_historical_price.csv")
+data_btc1 = read.csv("C:/Users/PC/Downloads/btc_historical_price.csv")
 
-data_btc = data_btc[829:1656,]
+data_btc= data_btc1[829:1656,]
 View(data_btc)
 dim(data_btc)
 ```
@@ -24,26 +24,33 @@ library("graphics")
 library("TTR")
 library("TSA")
 library("ggplot2")
+library("dplyr")
+library("lubridate")
+library("zoo")
+library("stats")
 ```
 
 ```{r}
 data_btc.ts= ts(data_btc$price)
 summary(data_btc.ts)
 
-ts.plot(btc_harga, xlab="Time period", ylab="price", main = "plot harga bitcoin data dani")
+ts.plot(data_btc.ts, xlab="Time period", ylab="price", main = "plot harga bitcoin data dani")
 ```
 
 ```{r}
 jumlah_data = nrow(data_btc)
 
-n_data_train = floor(0.75 * jumlah_data)
+n_data_train = floor(0.8 * jumlah_data)
 
 train_data = data_btc[1:n_data_train, ]
 test_data  = data_btc[(n_data_train+1):jumlah_data, ]
 
-
 train_data.ts = ts(train_data$price)
 test_data.ts = ts(test_data$price)
+
+train_data$date <- as.Date(train_data$date, format = "%m/%d/%Y")
+test_data$date  <- as.Date(test_data$date,  format = "%m/%d/%Y")
+
 ```
 
 ```{r}
@@ -52,6 +59,531 @@ plot(train_data.ts, col= "light blue",main="plot train")
 plot(test_data.ts, col = "light blue", main = "plot test")
 ```
 ```{r}
+
+
+ggplot() + 
+  geom_line(data = train_data, aes(x = date, y = price, col = "Data Latih")) +
+  geom_line(data = test_data, aes(x = date, y = price, col = "Data Uji")) +
+  labs(title = "Plot Harga BTC (Train vs Test)",
+       x = "Periode Waktu", y = "Price", color = "Legend") +
+  scale_colour_manual(name = "Keterangan:",
+                      breaks = c("Data Latih", "Data Uji"),
+                      values = c("Data Latih" = "black", "Data Uji" = "red")) + 
+  theme_bw() + 
+  theme(legend.position = "bottom",
+        plot.caption = element_text(hjust = 0.5, size = 12))
+
+```
+
+
+
+```{r}
+data.sma = SMA(train_data.ts, n=15)
+data.sma
+
+data.ramal<-c(NA,data.sma)
+data.ramal 
+```
+```{r}
+data.gab = cbind(
+  aktual=c(data_btc.ts),
+  pemulusan=c(data.sma,rep(NA,166)),
+  ramalan=c(data.ramal,rep(data.ramal[length(data.ramal)],165)))
+
+data.gab
+```
+
+```{r}
+ts.plot(data_btc.ts, xlab="Time Period ", ylab="price", main= "SMA M=15 Data Sales")
+
+lines(data.gab[,2],col="green",lwd=4)
+lines(data.gab[,3],col="red",lwd=3)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=7, col=c("black","green","red"), cex=0.7)
+```
+```{r}
+#Menghitung nilai keakuratan data latih
+error_train.sma = train_data.ts-data.ramal[1:length(train_data.ts)]
+
+SSE_train.sma = sum(error_train.sma[16:length(train_data.ts)]^2)
+MSE_train.sma = mean(error_train.sma[16:length(train_data.ts)]^2)
+MAPE_train.sma = mean(abs((error_train.sma[16:length(train_data.ts)]/train_data.ts[16:length(train_data.ts)])*100))
+
+akurasi_train.sma = matrix(c(SSE_train.sma, MSE_train.sma, MAPE_train.sma))
+row.names(akurasi_train.sma)= c("SSE", "MSE", "MAPE")
+colnames(akurasi_train.sma)= c("Akurasi m = 15")
+akurasi_train.sma
+```
+```{r}
+#Menghitung nilai keakuratan data uji
+error_test.sma = test_data.ts-data.gab[663:828,3]
+
+SSE_test.sma = sum(error_test.sma^2)
+MSE_test.sma = mean(error_test.sma^2)
+MAPE_test.sma = mean(abs(((error_test.sma/test_data.ts)*100)))
+
+akurasi_test.sma <- matrix(c(SSE_test.sma, MSE_test.sma, MAPE_test.sma))
+row.names(akurasi_test.sma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_test.sma) <- c("Akurasi m = 15")
+akurasi_test.sma
+```
+
+```{r}
+dma <- SMA(data.sma, n = 15)
+At <- 2*data.sma - dma
+Bt <- 2/(15-1)*(data.sma - dma)
+data.dma<- At+Bt
+data.ramal2<- c(NA, data.dma)
+
+t = 1:166
+f = c()
+
+for (i in t) {
+  f[i] = At[length(At)] + Bt[length(Bt)]*(i)
+}
+
+data.gab2 <- cbind(aktual = c(data_btc.ts), 
+                   pemulusan1 = c(data.sma,rep(NA,166)),
+                   pemulusan2 = c(dma, rep(NA,166)),
+                   At = c(At, rep(NA,166)), 
+                   Bt = c(Bt,rep(NA,166)),
+                   ramalan = c(data.ramal2, f[-1]))
+View(data.gab2)
+```
+
+
+
+
+```{r}
+ts.plot(data_btc.ts, xlab="Time Period ", ylab="price", main= "DMA N=15 btc price")
+
+lines(data.gab2[,3],col="green",lwd=2)
+lines(data.gab2[,6],col="red",lwd=2)
+legend("topleft",c("data aktual","data pemulusan","data peramalan"), lty=8, col=c("black","green","red"), cex=0.8)
+
+```
+
+```{r}
+#Menghitung nilai keakuratan data latih
+error_train.dma = train_data.ts-data.ramal2[1:length(train_data.ts)]
+
+SSE_train.dma = sum(error_train.dma[30:length(train_data.ts)]^2)
+MSE_train.dma = mean(error_train.dma[30:length(train_data.ts)]^2)
+MAPE_train.dma = mean(abs((error_train.dma[30:length(train_data.ts)]/train_data.ts[30:length(train_data.ts)])*100))
+
+akurasi_train.dma <- matrix(c(SSE_train.dma, MSE_train.dma, MAPE_train.dma))
+row.names(akurasi_train.dma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_train.dma) <- c("Akurasi m = 15")
+akurasi_train.dma
+```
+```{r}
+error_test.dma = test_data.ts-data.gab2[663:828,6]
+SSE_test.dma = sum(error_test.dma^2)
+MSE_test.dma = mean(error_test.dma^2)
+MAPE_test.dma = mean(abs((error_test.dma/test_data.ts*100)))
+
+akurasi_test.dma <- matrix(c(SSE_test.dma, MSE_test.dma, MAPE_test.dma))
+row.names(akurasi_test.dma)<- c("SSE", "MSE", "MAPE")
+colnames(akurasi_test.dma) <- c("Akurasi m = 15")
+akurasi_test.dma
+```
+Hasil DMA kurang baik karena MAPE yang jauh lebih besar dari pada 10%
+
+
+#COBA SMA dan DMA m = 7 (1 minggu)
+```{r}
+
+
+data.sma7 = SMA(train_data.ts, n=7)
+data.ramal7 <- c(NA, data.sma7)
+
+```
+
+
+```{r}
+# Gabungkan data untuk plot
+data.gab7 = cbind(
+  aktual = c(data_btc.ts),
+  pemulusan = c(data.sma7, rep(NA, length(data_btc.ts) - length(data.sma7))),
+  ramalan = c(data.ramal7, rep(data.ramal7[length(data.ramal7)], length(data_btc.ts) - length(data.ramal7)))
+)
+
+```
+
+```{r}
+# Plot SMA m=7
+ts.plot(data_btc.ts, xlab="Time Period", ylab="price", main="SMA M=7 BTC Price")
+lines(data.gab7[,2], col="green", lwd=4)
+lines(data.gab7[,3], col="red", lwd=3)
+legend("topleft", c("data aktual","data pemulusan","data peramalan"),
+       lty=7, col=c("black","green","red"), cex=0.7)
+
+```
+
+```{r}
+
+# Akurasi SMA m=7
+
+error_train.sma7 = train_data.ts - data.ramal7[1:length(train_data.ts)]
+
+SSE_train.sma7 = sum(error_train.sma7[8:length(train_data.ts)]^2) # mulai dari m+1
+MSE_train.sma7 = mean(error_train.sma7[8:length(train_data.ts)]^2)
+MAPE_train.sma7 = mean(abs(error_train.sma7[8:length(train_data.ts)] / train_data.ts[8:length(train_data.ts)] * 100))
+
+akurasi_train.sma7 = matrix(c(SSE_train.sma7, MSE_train.sma7, MAPE_train.sma7))
+row.names(akurasi_train.sma7) = c("SSE","MSE","MAPE")
+colnames(akurasi_train.sma7) = c("Akurasi m = 7")
+akurasi_train.sma7
+
+```
+
+```{r}
+# Akurasi data uji SMA m=7
+error_test.sma7 = test_data.ts - data.gab7[(length(train_data.ts)+1):length(data_btc.ts), 3]
+
+SSE_test.sma7 = sum(error_test.sma7^2)
+MSE_test.sma7 = mean(error_test.sma7^2)
+MAPE_test.sma7 = mean(abs(error_test.sma7 / test_data.ts * 100))
+
+akurasi_test.sma7 = matrix(c(SSE_test.sma7, MSE_test.sma7, MAPE_test.sma7))
+row.names(akurasi_test.sma7) = c("SSE","MSE","MAPE")
+colnames(akurasi_test.sma7) = c("Akurasi m = 7")
+akurasi_test.sma7
+
+```
+
+```{r}
+
+# DMA dengan m = 7
+
+dma7 <- SMA(data.sma7, n = 7)
+At7 <- 2*data.sma7 - dma7
+Bt7 <- 2/(7-1)*(data.sma7 - dma7)
+data.dma7 <- At7 + Bt7
+data.ramal2_7 <- c(NA, data.dma7)
+
+t7 = 1:length(test_data.ts)
+f7 = c()
+for (i in t7) {
+  f7[i] = At7[length(At7)] + Bt7[length(Bt7)]*i
+}
+
+data.gab2_7 <- cbind(
+  aktual = c(data_btc.ts),
+  pemulusan1 = c(data.sma7, rep(NA, length(test_data.ts))),
+  pemulusan2 = c(dma7, rep(NA, length(test_data.ts))),
+  At = c(At7, rep(NA, length(test_data.ts))),
+  Bt = c(Bt7, rep(NA, length(test_data.ts))),
+  ramalan = c(data.ramal2_7, f7[-1])
+)
+
+```
+
+```{r}
+# Plot DMA m=7
+ts.plot(data_btc.ts, xlab="Time Period", ylab="price", main="DMA m=7 BTC Price")
+lines(data.gab2_7[,3], col="green", lwd=2)
+lines(data.gab2_7[,6], col="red", lwd=2)
+legend("topleft", c("data aktual","data pemulusan","data peramalan"),
+       lty=8, col=c("black","green","red"), cex=0.8)
+
+```
+
+```{r}
+
+# Akurasi DMA m=7
+
+error_train.dma7 = train_data.ts - data.ramal2_7[1:length(train_data.ts)]
+
+SSE_train.dma7 = sum(error_train.dma7[14:length(train_data.ts)]^2) 
+MSE_train.dma7 = mean(error_train.dma7[14:length(train_data.ts)]^2)
+MAPE_train.dma7 = mean(abs(error_train.dma7[14:length(train_data.ts)] / train_data.ts[14:length(train_data.ts)] * 100))
+
+akurasi_train.dma7 = matrix(c(SSE_train.dma7, MSE_train.dma7, MAPE_train.dma7))
+row.names(akurasi_train.dma7) = c("SSE","MSE","MAPE")
+colnames(akurasi_train.dma7) = c("Akurasi m = 7")
+akurasi_train.dma7
+
+```
+```{r}
+error_test.dma7 = test_data.ts - data.ramal2_7[1:length(test_data.ts)]
+
+SSE_test.dma7 = sum(error_test.dma7[14:length(test_data.ts)]^2) # mulai dari 2*m
+MSE_test.dma7 = mean(error_test.dma7[14:length(test_data.ts)]^2)
+MAPE_test.dma7 = mean(abs(error_test.dma7[14:length(test_data.ts)] / test_data.ts[14:length(test_data.ts)] * 100))
+
+akurasi_test.dma7 = matrix(c(SSE_test.dma7, MSE_test.dma7, MAPE_test.dma7))
+row.names(akurasi_test.dma7) = c("SSE","MSE","MAPE")
+colnames(akurasi_test.dma7) = c("Akurasi m = 7")
+akurasi_test.dma7
+
+```
+
+```{r}
+# SMA m= 30
+
+data.sma30 = SMA(train_data.ts, n=30)
+
+data.ramal30= c(NA, data.sma30)
+
+
+#plot
+data.gab30 = cbind(
+  aktual = c(data_btc.ts),
+  pemulusan = c(data.sma30, rep(NA, length(data_btc.ts) - length(data.sma30))),
+  ramalan = c(data.ramal30, rep(data.ramal30[length(data.ramal30)], length(data_btc.ts) - length(data.ramal30)))
+)
+
+
+# Plot SMA m=30
+ts.plot(data_btc.ts, xlab="Time Period", ylab="price", main="SMA M=30 BTC Price")
+lines(data.gab30[,2], col="green", lwd=4)
+lines(data.gab30[,3], col="red", lwd=3)
+legend("topleft", c("data aktual","data pemulusan","data peramalan"),
+       lty=7, col=c("black","green","red"), cex=0.7)
+
+# Akurasi SMA m=  30
+error_train.sma30 = train_data.ts - data.ramal30[1:length(train_data.ts)]
+
+SSE_train.sma30 = sum(error_train.sma30[31:length(train_data.ts)]^2) # mulai dari m+1
+MSE_train.sma30 = mean(error_train.sma30[31:length(train_data.ts)]^2)
+MAPE_train.sma30 = mean(abs(error_train.sma30[31:length(train_data.ts)] / train_data.ts[31:length(train_data.ts)] * 100))
+
+akurasi_train.sma30 = matrix(c(SSE_train.sma30, MSE_train.sma30, MAPE_train.sma30))
+row.names(akurasi_train.sma30) = c("SSE","MSE","MAPE")
+colnames(akurasi_train.sma30) = c("Akurasi m = 30")
+akurasi_train.sma30
+
+# Akurasi data uji SMA m = 30
+error_test.sma30 = test_data.ts - data.gab30[(length(train_data.ts)+1):length(data_btc.ts), 3]
+
+SSE_test.sma30 = sum(error_test.sma30^2)
+MSE_test.sma30 = mean(error_test.sma30^2)
+MAPE_test.sma30 = mean(abs(error_test.sma30 / test_data.ts * 100))
+
+akurasi_test.sma30 = matrix(c(SSE_test.sma30, MSE_test.sma30, MAPE_test.sma30))
+row.names(akurasi_test.sma30) = c("SSE","MSE","MAPE")
+colnames(akurasi_test.sma30) = c("Akurasi m = 30")
+akurasi_test.sma30
+
+
+# DMA m=30
+dma30= SMA(data.sma30, n = 30)
+At30 = 2*data.sma30 - dma30
+Bt30 = 2/(30-1)*(data.sma30 - dma30)
+data.dma30 <- At30 + Bt30
+data.ramal2_30= c(NA, data.dma30)
+
+t30 = 1:length(test_data.ts)
+f30 = c()
+for (i in t30) {
+  f30[i] = At30[length(At30)] + Bt30[length(Bt30)]*i
+}
+
+data.gab2_30 = cbind(
+  aktual = c(data_btc.ts),
+  pemulusan1 = c(data.sma30, rep(NA, length(test_data.ts))),
+  pemulusan2 = c(dma30, rep(NA, length(test_data.ts))),
+  At = c(At30, rep(NA, length(test_data.ts))),
+  Bt = c(Bt30, rep(NA, length(test_data.ts))),
+  ramalan = c(data.ramal2_30, f30[-1])
+)
+
+# Plot DMA m=30
+ts.plot(data_btc.ts, xlab="Time Period", ylab="price", main="DMA M=30 BTC Price")
+lines(data.gab2_30[,3], col="green", lwd=2)
+lines(data.gab2_30[,6], col="red", lwd=2)
+legend("topleft", c("data aktual","data pemulusan","data peramalan"),
+       lty=8, col=c("black","green","red"), cex=0.8)
+
+# Akurasi DMA m=30 train
+error_train.dma30 = train_data.ts - data.ramal2_30[1:length(train_data.ts)]
+
+SSE_train.dma30 = sum(error_train.dma30[61:length(train_data.ts)]^2) 
+MSE_train.dma30 = mean(error_train.dma30[61:length(train_data.ts)]^2)
+MAPE_train.dma30 = mean(abs(error_train.dma30[61:length(train_data.ts)] / train_data.ts[61:length(train_data.ts)] * 100))
+
+akurasi_train.dma30 = matrix(c(SSE_train.dma30, MSE_train.dma30, MAPE_train.dma30))
+row.names(akurasi_train.dma30) = c("SSE","MSE","MAPE")
+colnames(akurasi_train.dma30) = c("Akurasi m = 30")
+akurasi_train.dma30
+
+# Akurasi DMA m=30 test
+error_test.dma30 = test_data.ts - data.ramal2_30[1:length(test_data.ts)]
+
+SSE_test.dma30 = sum(error_test.dma30[61:length(test_data.ts)]^2) 
+MSE_test.dma30 = mean(error_test.dma30[61:length(test_data.ts)]^2)
+MAPE_test.dma30 = mean(abs(error_test.dma30[61:length(test_data.ts)] / test_data.ts[61:length(test_data.ts)] * 100))
+
+akurasi_test.dma30 = matrix(c(SSE_test.dma30, MSE_test.dma30, MAPE_test.dma30))
+row.names(akurasi_test.dma30) = c("SSE","MSE","MAPE")
+colnames(akurasi_test.dma30) = c("Akurasi m = 30")
+akurasi_test.dma30
+
+```
+
+
+#Kesimpulan SMA & DMA
+PAda kasus ini bisa diketahui bahwa semakin kecil M nya maka akan menghasilkan SSE MSE MAPE yang lebih baik namun terlalu sensitif dan banyak noisenya. Untuk pemilihan M untuk bitcoin ini efektif pada m =  14 karena cukup sesuai dengan harga / data bitcoin yang sangat volatile. Berdasarkan hasil SSE MSE MAPE antara SMA dan DMA, SMA mampu memberikan hasil yang jauh lebih baik. Selain dari ketiga indikator tadi, berdasarkan hasil visual plot uji, SMA dapat memberikan hasil yang jauh lebih akurat pada kasus ini.
+
+
+```{r}
+#Mencoba SES & DES
+
+n = nrow(data_btc)
+
+
+n_train = floor(0.8 * n)
+
+
+training = data_btc[1:n_train, ]
+testing  = data_btc[(n_train+1):n, ]
+
+
+train.ts = ts(training$price)
+test.ts  = ts(testing$price)
+
+
+
+```
+
+
+```{r}
+#Fungsi holtwinter alpha 0.2
+ses1<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = 0.2)
+plot(ses1)
+ramalan1 = forecast(ses1, h= 166)
+ramalan1
+
+# SES dengan alpha = 0.2
+SSE1<-ses1$SSE
+MSE1<-ses1$SSE/length(train.ts)
+RMSE1<-sqrt(MSE1)
+
+akurasi1 <- matrix(c(SSE1,MSE1,RMSE1))
+row.names(akurasi1)<- c("SSE", "MSE", "RMSE")
+colnames(akurasi1) <- c("Akurasi lamda=0.2")
+akurasi1
+```
+
+
+```{r}
+#SES alpha 0.5
+ses2<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = 0.5)
+plot(ses2)
+ramalan2 = forecast(ses2, h= 166)
+ramalan2
+
+
+SSE2<-ses2$SSE
+MSE2<-ses2$SSE/length(train.ts)
+RMSE2<-sqrt(MSE2)
+
+akurasi2 <- matrix(c(SSE2,MSE2,RMSE2))
+row.names(akurasi2)<- c("SSE", "MSE", "RMSE")
+colnames(akurasi2) <- c("Akurasi lamda=0.5")
+akurasi2
+
+```
+
+
+```{r}
+# SES dengan alpha = 0.7
+ses3<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE, alpha = 0.7)
+ses3
+plot(ses3)
+ramalan3 = forecast(ses3, h = 166)
+ramalan3
+
+
+SSE3<-ses3$SSE
+MSE3<-ses3$SSE/length(train.ts)
+RMSE3<-sqrt(MSE3)
+
+akurasi3 <- matrix(c(SSE3,MSE3,RMSE3))
+row.names(akurasi3)<- c("SSE", "MSE", "RMSE")
+colnames(akurasi3) <- c("Akurasi lamda=0.7")
+akurasi3
+
+#Mencari Mape
+fitted3<-ramalan3$fitted
+sisaan3<-ramalan3$residuals
+head(sisaan3)
+
+resid3<-train_data$price-ramalan1$fitted
+head(resid3)
+
+MAPE.3 = sum(abs(sisaan3[2:length(train.ts)]/train.ts[2:length(train.ts)])*
+               100)/length(train.ts)
+MAPE.3
+
+akurasi.3 <- matrix(c(MAPE.3))
+row.names(akurasi.3)<- c("MAPE")
+colnames(akurasi.3) <- c("Akurasi lamda=0.7")
+akurasi.3
+```
+
+
+```{r}
+#SES dengan alpha = optimal
+ses4<- HoltWinters(train.ts, gamma = FALSE, beta = FALSE,alpha = NULL)
+ses4
+plot(ses4)
+ramalan4 = forecast(ses4, h =166)
+ramalan4
+
+SSE4<-ses4$SSE
+MSE4<-ses4$SSE/length(train.ts)
+RMSE4<-sqrt(MSE4)
+
+akurasi4 <- matrix(c(SSE4,MSE4,RMSE4))
+row.names(akurasi4)<- c("SSE", "MSE", "RMSE")
+colnames(akurasi4) <- c("Akurasi lamda= optimal")
+akurasi4
+
+```
+
+
+
+
+
+
+```{r}
+#SES dengan alpha = optimal
+SSE4<-ses4$SSE
+MSE4<-ses4$SSE/length(train.ts)
+RMSE4<-sqrt(MSE4)
+
+akurasi4 <- matrix(c(SSE4,MSE4,RMSE4))
+row.names(akurasi4)<- c("SSE", "MSE", "RMSE")
+colnames(akurasi4) <- c("Akurasi lamda= optimal")
+akurasi4
+
+
+```
+
+
+```{r}
+#Akurasi data uji
+#alpha 0.2
+accuracy(ramalan1, test_data$price)
+```
+
+
+```{r}
+#alpha0.5
+accuracy(ramalan2, test_data$price)
+```
+
+
+```{r}
+#alpha 0.7
+accuracy(ramalan3, test_data$price)
+```
+
+
+```{r}
+#alpha opt atau 0.99
+accuracy(ramalan4, test_data$price)
 
 ```
 
