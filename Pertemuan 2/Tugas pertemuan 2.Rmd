@@ -94,7 +94,7 @@ data.gab
 ```
 
 ```{r}
-ts.plot(data_btc.ts, xlab="Time Period ", ylab="price", main= "SMA M=15 Data Sales")
+ts.plot(data_btc.ts, xlab="Time Period ", ylab="price", main= "SMA test M=15 Data Sales")
 
 lines(data.gab[,2],col="green",lwd=4)
 lines(data.gab[,3],col="red",lwd=3)
@@ -211,7 +211,7 @@ data.gab7 = cbind(
 
 ```{r}
 # Plot SMA m=7
-ts.plot(data_btc.ts, xlab="Time Period", ylab="price", main="SMA M=7 BTC Price")
+ts.plot(data_btc.ts, xlab="Time Period", ylab="price", main="SMA M=7 train BTC Price")
 lines(data.gab7[,2], col="green", lwd=4)
 lines(data.gab7[,3], col="red", lwd=3)
 legend("topleft", c("data aktual","data pemulusan","data peramalan"),
@@ -231,7 +231,7 @@ MAPE_train.sma7 = mean(abs(error_train.sma7[8:length(train_data.ts)] / train_dat
 
 akurasi_train.sma7 = matrix(c(SSE_train.sma7, MSE_train.sma7, MAPE_train.sma7))
 row.names(akurasi_train.sma7) = c("SSE","MSE","MAPE")
-colnames(akurasi_train.sma7) = c("Akurasi m = 7")
+colnames(akurasi_train.sma7) = c("Akurasi train sma m = 7")
 akurasi_train.sma7
 
 ```
@@ -246,7 +246,7 @@ MAPE_test.sma7 = mean(abs(error_test.sma7 / test_data.ts * 100))
 
 akurasi_test.sma7 = matrix(c(SSE_test.sma7, MSE_test.sma7, MAPE_test.sma7))
 row.names(akurasi_test.sma7) = c("SSE","MSE","MAPE")
-colnames(akurasi_test.sma7) = c("Akurasi m = 7")
+colnames(akurasi_test.sma7) = c("Akurasi test sma m = 7")
 akurasi_test.sma7
 
 ```
@@ -280,7 +280,7 @@ data.gab2_7 <- cbind(
 
 ```{r}
 # Plot DMA m=7
-ts.plot(data_btc.ts, xlab="Time Period", ylab="price", main="DMA m=7 BTC Price")
+ts.plot(data_btc.ts, xlab="Time Period", ylab="price", main="DMA m=7 test BTC Price")
 lines(data.gab2_7[,3], col="green", lwd=2)
 lines(data.gab2_7[,6], col="red", lwd=2)
 legend("topleft", c("data aktual","data pemulusan","data peramalan"),
@@ -300,7 +300,7 @@ MAPE_train.dma7 = mean(abs(error_train.dma7[14:length(train_data.ts)] / train_da
 
 akurasi_train.dma7 = matrix(c(SSE_train.dma7, MSE_train.dma7, MAPE_train.dma7))
 row.names(akurasi_train.dma7) = c("SSE","MSE","MAPE")
-colnames(akurasi_train.dma7) = c("Akurasi m = 7")
+colnames(akurasi_train.dma7) = c("Akurasi train dma m = 7")
 akurasi_train.dma7
 
 ```
@@ -313,7 +313,7 @@ MAPE_test.dma7 = mean(abs(error_test.dma7[14:length(test_data.ts)] / test_data.t
 
 akurasi_test.dma7 = matrix(c(SSE_test.dma7, MSE_test.dma7, MAPE_test.dma7))
 row.names(akurasi_test.dma7) = c("SSE","MSE","MAPE")
-colnames(akurasi_test.dma7) = c("Akurasi m = 7")
+colnames(akurasi_test.dma7) = c("Akurasi test dma m = 7")
 akurasi_test.dma7
 
 ```
@@ -350,7 +350,7 @@ MAPE_train.sma30 = mean(abs(error_train.sma30[31:length(train_data.ts)] / train_
 
 akurasi_train.sma30 = matrix(c(SSE_train.sma30, MSE_train.sma30, MAPE_train.sma30))
 row.names(akurasi_train.sma30) = c("SSE","MSE","MAPE")
-colnames(akurasi_train.sma30) = c("Akurasi m = 30")
+colnames(akurasi_train.sma30) = c("Akurasi sma train m = 30")
 akurasi_train.sma30
 
 # Akurasi data uji SMA m = 30
@@ -362,7 +362,7 @@ MAPE_test.sma30 = mean(abs(error_test.sma30 / test_data.ts * 100))
 
 akurasi_test.sma30 = matrix(c(SSE_test.sma30, MSE_test.sma30, MAPE_test.sma30))
 row.names(akurasi_test.sma30) = c("SSE","MSE","MAPE")
-colnames(akurasi_test.sma30) = c("Akurasi m = 30")
+colnames(akurasi_test.sma30) = c("Akurasi sma test m = 30")
 akurasi_test.sma30
 
 
@@ -404,7 +404,7 @@ MAPE_train.dma30 = mean(abs(error_train.dma30[61:length(train_data.ts)] / train_
 
 akurasi_train.dma30 = matrix(c(SSE_train.dma30, MSE_train.dma30, MAPE_train.dma30))
 row.names(akurasi_train.dma30) = c("SSE","MSE","MAPE")
-colnames(akurasi_train.dma30) = c("Akurasi m = 30")
+colnames(akurasi_train.dma30) = c("Akurasi dma train m = 30")
 akurasi_train.dma30
 
 # Akurasi DMA m=30 test
@@ -416,14 +416,14 @@ MAPE_test.dma30 = mean(abs(error_test.dma30[61:length(test_data.ts)] / test_data
 
 akurasi_test.dma30 = matrix(c(SSE_test.dma30, MSE_test.dma30, MAPE_test.dma30))
 row.names(akurasi_test.dma30) = c("SSE","MSE","MAPE")
-colnames(akurasi_test.dma30) = c("Akurasi m = 30")
+colnames(akurasi_test.dma30) = c("Akurasi dma test m = 30")
 akurasi_test.dma30
 
 ```
 
 
 #Kesimpulan SMA & DMA
-PAda kasus ini bisa diketahui bahwa semakin kecil M nya maka akan menghasilkan SSE MSE MAPE yang lebih baik namun terlalu sensitif dan banyak noisenya. Untuk pemilihan M untuk bitcoin ini efektif pada m =  14 karena cukup sesuai dengan harga / data bitcoin yang sangat volatile. Berdasarkan hasil SSE MSE MAPE antara SMA dan DMA, SMA mampu memberikan hasil yang jauh lebih baik. Selain dari ketiga indikator tadi, berdasarkan hasil visual plot uji, SMA dapat memberikan hasil yang jauh lebih akurat pada kasus ini.
+PAda kasus ini bisa diketahui bahwa semakin kecil M nya maka akan menghasilkan SSE MSE MAPE yang lebih baik namun terlalu sensitif dan banyak noisenya. Untuk pemilihan M untuk bitcoin ini efektif pada m =  7 menggunakan SMA karena cukup sesuai dengan harga / data bitcoin yang sangat volatile. Berdasarkan hasil SSE MSE MAPE antara SMA dan DMA, SMA mampu memberikan hasil yang jauh lebih baik. Selain dari ketiga indikator tadi, berdasarkan hasil visual plot uji, SMA dapat memberikan hasil yang lebih akurat pada kasus ini.
 
 
 ```{r}
@@ -586,4 +586,81 @@ accuracy(ramalan3, test_data$price)
 accuracy(ramalan4, test_data$price)
 
 ```
+#Hasil SES
+Berdasarkan hasil SES yang telah dilakukan, dapat diketahui saat pengujian model terhadap data train pada kasus ini semakin besar nilai alpha (makin dekat dengan 1), maka hasil ME RMSE MSE dan MAPE akan semakin bagus dibanding yang lain. Namun, saat telah mencoba dilakukan forecasting dengan test_data (data uji) alpha yang "optimal" tidak lagi memberikan hasil yang terbaik. Menurut saya, pada data uji hasil terbaik dihasilkan oleh alpha 0.2 dengan nilai ME RMSE yang cenderung lebih kecil dari pada yang lain dan MAPE sekitar 5.7%
 
+
+
+```{r}
+#Mencoba DES
+
+des.1<- HoltWinters(train_data.ts, gamma = FALSE, beta = 0.2, alpha = 0.5)
+plot(des.1)
+ramalandes1<- forecast(des.1, h=166)
+ramalandes1
+
+
+
+
+plot(data_btc.ts)
+lines(des.1$fitted[,1], lty=2, col="blue")
+lines(ramalandes1$mean, col="red")
+
+#akurasi train
+ssedes.train1<-des.1$SSE
+msedes.train1<-ssedes.train1/length(train_data.ts)
+sisaandes1<-ramalandes1$residuals
+head(sisaandes1)
+
+mapedes.train1 <- sum(abs(sisaandes1[3:length(train_data.ts)]/train.ts[3:length(train_data.ts)])
+                      *100)/length(train.ts)
+
+akurasides.1 <- matrix(c(ssedes.train1,msedes.train1,mapedes.train1))
+row.names(akurasides.1)<- c("SSE", "MSE", "MAPE")
+colnames(akurasides.1) <- c("Akurasi train DES lambda 0.5 dan gamma 0.2")
+akurasides.1
+
+
+#akurasi testing
+selisihdes1<-ramalandes1$mean-test_data$price
+selisihdes1
+
+
+
+SSEtestingdes1<-sum(selisihdes1^2)
+MSEtestingdes1<-SSEtestingdes1/length(test_data$price)
+MAPEtestingdes1<-sum(abs(selisihdes1/test_data$price)*100)/length(test_data$price)
+akurasitestingdes = matrix(c(SSEtestingdes1,
+                               MSEtestingdes1,
+                               MAPEtestingdes1),
+                             nrow = 3, ncol = 1)
+
+row.names(akurasitestingdes) = c("SSE", "MSE", "MAPE")
+colnames(akurasitestingdes) = c("Akurasi test DES lambda 0.5 dan gamma 0.2")
+
+# Tampilkan hasil
+akurasitestingdes
+```
+
+```{r}
+# Akurasi SMA m=7
+
+akurasi_train.sma7
+akurasi_test.sma7
+
+```
+
+```{r}
+#SES dengan lambda 0.7
+accuracy(ramalan3, test_data$price)
+```
+
+```{r}
+#Akurasi DES lambda 0.5 dan gamma 0.2
+akurasides.1
+akurasitestingdes
+```
+
+
+#Kesimpulan 
+Berdasarkan hasil ketiga metode, menurut saya Double Exponential Smoothing  dengan parameter lambda =0.5 dan gamma =0.2 merupakan pilihan terbaik walaupun nilai MAPE pada data train tidak yang paling rendah, DES dapat memberikan keseimbangan antara performa di data latih dan data uji, serta mampu menangkap tren dengan lebih baik dibanding SMA maupun SES. SMA m=7 terlalu sederhana dan menghasilkan error yang lebih tinggi, sedangkan SES memang unggul di training namun performanya turun saat diuji sehingga rawan overfitting. Dengan demikian, menurut saya DES lebih layak dipilih karena lebih stabil, mampu mengikuti tren, dan menjaga akurasi yang relatif konsisten pada data baru.
