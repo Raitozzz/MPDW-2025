@@ -1,0 +1,121 @@
+---
+title: "Tugas IPM"
+author: "Rahmandani G1401231029"
+date: "2025-09-02"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r}
+data_ipm = read.csv("C:/Users/Asus/Downloads/Jatim.csv")
+plot(data_ipm)
+library(lmtest) # Untuk Uji Durbin-Watson
+library(orcutt) # Untuk metode Cochrane-Orcutt
+library(HoRM) 
+```
+```{r}
+model_awal_ipm = lm(ipm~Tahun, data = data_ipm)
+summary(model_awal_ipm)
+
+sisaan_awal_ipm = residuals(model_awal_ipm)
+
+plot(data_ipm$Tahun, sisaan_awal_ipm, type="o", pch=20, col="light blue",
+     main="Plot Sisaan vs Waktu", xlab="Tahun", ylab="Sisaan")
+abline(h=0, lty=2)
+```
+```{r}
+dwtest(model_awal_ipm)
+```
+```{r}
+model_co_ipm = cochrane.orcutt(model_awal_ipm)
+summary(model_co_ipm)
+
+
+rho_co = model_co_ipm$rho_co
+cat("Rho optimum:", rho_co)
+```
+#Hasil Cochrane orcutt
+Model hasil cochrane orcutt menghahsilkan model yang sudah tidak ada auto korelasi dengan p-value pada durbin watson test sebesar 0.255 (tak tolak H0 /  cukup bukti untuk mengatakan bahwa model ipm cochrane orcutt tidak ada autokorelasi). Cochrane orcutt berhasil menghasilkan model yang lebih baik jika dibandingkan dengan regresi linear sederhana pada kasus ini dengan rho 0.3409
+
+
+```{r}
+hildreth.lu.func<- function(r, model){
+  x <- model.matrix(model)[,-1]
+  y <- model.response(model.frame(model))
+  n <- length(y)
+  t <- 2:n
+  y <- y[t]-r*y[t-1]
+  x <- x[t]-r*x[t-1]
+  
+  return(lm(y~x))
+}
+
+#Pencariab rho yang meminimumkan SSE
+r <- c(seq(-1,1, by= 0.001))
+tab <- data.frame("rho" = r, "SSE" = sapply(r, function(i){deviance(hildreth.lu.func(i, model_awal_ipm))}))
+round(tab, 4)
+View(tab)
+```
+```{r}
+par(mfrow = c(1,1))
+plot(tab$SSE ~ tab$rho , type = "l", xlab = "Rho", ylab = "SSE")
+abline(v = tab[tab$SSE==min(tab$SSE),"rho"], lty = 2, col="red",lwd=2)
+text(x=0.737, y=0.2543, labels = "rho=0.737", cex = 0.8)
+```
+```{r}
+model_hil <- hildreth.lu(data_ipm$ipm, data_ipm$Tahun, rho = 0.737)
+summary(model_hil)
+```
+
+```{r}
+#Transformasi Balik
+cat("y = ", coef(model_hil)[1]/(1-0.341), "+", coef(model_hil)[2],"x", sep = "")
+```
+```{r}
+dwtest(model_hil)
+```
+
+```{r}
+#Transformasi Balik
+cat("y = ", coef(model_hil)[1]/(1-0.341), "+", coef(model_hil)[2],"x", sep = "")
+```
+```{r}
+#Deteksi autokorelasi
+dwtest(model_hil)
+```
+
+**Hasil Penanganan (H-L):**
+
+-   Plot yang dihasilkan secara visual menunjukkan nilai ρ mana yang menjadi "juara" (memiliki SSE terendah).
+
+-   Hasil summary memberikan model akhir yang juga sudah "sehat", dengan statistik D-W yang sudah membaik.
+
+
+
+```{r}
+# Menghitung SSE untuk setiap model secara manual
+sse_awal <- sum(residuals(model_awal_ipm)^2)
+sse_co <- sum(residuals(model_co_ipm)^2)
+sse_hl <- sum(residuals(model_hil)^2)
+awl = dwtest(model_awal_ipm)
+co = dwtest(model_co_ipm)
+hl = dwtest(model_hil)
+awl
+co
+hl
+# Membuat tabel perbandingan
+tabbb = data.frame(
+  Metode = c("Model Awal (Sakit)", "Cochrane-Orcutt (Sehat)", "Hildreth-Lu (Sehat)"),
+  SSE = c(sse_awal, sse_co, sse_hl),
+  DW_Statistic = c(3.91e-06, 0.2555, 0.2556)
+)
+tabbb
+```
+#Kesimpulan
+Model awal ipm Jawa Timur memiliki autokorelasi yang dapat dibuktikan berdasarkan hasil DW test. Oleh karena itu dilakukan penanganan menggunakan cochrane orcutt dan hidreth lu. Setelah melakukan penanganan, kedua metode tersebut dapat menangani autokorelasi model awal dengan baik. Berdasarkan tabel di atas model Hidreth Lu dapat menghasilkan model yang lebih baik
+
