@@ -1,0 +1,311 @@
+---
+title: "Tugas Pertemuan 4"
+author:
+- Rahmandani Bardianto G1401231029
+output:
+  html_document:
+    theme: yeti
+    toc: true
+    toc_float: true
+  word_document: default
+  pdf_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Import
+```{r}
+data_aqi = read.csv("C:/Users/PC/Downloads/NewDelhi_Air_quality.csv")
+head(data_aqi)
+library(dLagM)
+library(dynlm)
+library(MLmetrics)
+library(lmtest)
+library(car)
+str(data_aqi)
+```
+
+
+# Eksplorasi
+
+```{r}
+#Eksplorasi
+
+
+plot(data_aqi$so2)
+plot(data_aqi$no2)
+plot(data_aqi$pm10)
+plot(data_aqi$pm25)
+plot(data_aqi$o3)
+plot(data_aqi$AQI)
+```
+
+## Eksplorasi o3 dan AQI setiap 8 jam
+```{r}
+#Eksplorasi o3 dan AQI setiap 8 jam
+
+#Korelasi
+cor.test(data_aqi$AQI, data_aqi$o3,  method = "pearson")
+
+#Plot AQI
+#Membagi menjadi setiap 8 jam
+plot(data_aqi$AQI)
+par(mfrow = c(3,3), mar = c(4,4,2,1))
+for (i in seq(1, 72, by = 8)) {
+  idx_akhir = min(i + 7, nrow(data_aqi))
+  plot(data_aqi$AQI[i:idx_akhir], type = "l",
+       xlab = "Index dalam blok", ylab = "AQI",
+       main = paste("AQI —", i, "sampai", idx_akhir))
+  points(data_aqi$AQI[i:idx_akhir], pch = 16, cex = 0.6)
+}
+
+
+#Plot o3
+plot(data_aqi$o3)
+par(mfrow = c(3,3), mar = c(4,4,2,1))
+for (i in seq(1, 72, by = 8)) {
+  idx_akhir = min(i + 7, nrow(data_aqi))
+  plot(data_aqi$o3[i:idx_akhir], type = "l",
+       xlab = "Index dalam blok", ylab = "O3",
+       main = paste("O3 —", i, "sampai", idx_akhir))
+  points(data_aqi$O3[i:idx_akhir], pch = 16, cex = 0.6)
+}
+```
+# Pemilihan variabel penjelas (X)
+Berdasarkan hasil eksplorasi, didapatkan bahwa nilai ozone (o3) memiliki pola yang paling menyerupai pola dari AQI. O₃ di permukaan bumi adalah polutan sekunder yang terbentuk dari reaksi kompleks antara NOx dan VOC di bawah sinar matahari. Tidak seperti PM₂.₅ yang lebih merata, ozon bersifat hiper-lokal: beda konsentrasi antar stasiun dalam satu kota bisa lebih dari 100 µg/m³. Oleh karena itu, regulasi global (misalnya USEPA) merekomendasikan AQI dihitung dari stasiun dengan konsentrasi O₃ tertinggi, bukan rata-rata (Roychowdhury 2021)
+
+
+# Pembagian data
+```{r}
+#Membagi data train dan test
+aqi_train = data_aqi[1:56,]
+aqi_test = data_aqi[57:72,]
+
+#Data Time Series
+aqi_train.ts<-ts(aqi_train)
+aqi_test.ts<-ts(aqi_test)
+data_aqi.ts<-ts(data_aqi)
+```
+**Penjelasan**
+Rasio pembagian data train dan test biasanya membagi data dengan rasio 80:20 (Joseph 2022). Untuk model regresi, pendekatan pembagian data dengan rasio 80:20 terutama pada model time series dilakukan untuk menghindari "critical data leakage" (Ozupak 2025). Namun pada kasus kali ini saya tidak menggunakan rasio yang pas 80:20 karena 2 alasan. Alasan pertama data tidak bisa "pas" dibagi menjadi 80:20. Alasan kedua menurut The 8-hour NAAQS for ozone, paparan maksimum ozone dihitung mengikuti cycle rata rata setiap 8 jam sekali. Jika mengikuti hal tersebut maka pembagian data menjadi 1-56 dan 57-72 (16 data test) dapat mencakup 8 cycle di data train dan 2 cycle di data test dari 8 hour ozone cycle menurut NAAQS (National Ambient Air Quality Standards / lembaga dari US)
+
+# Model Regresi Linear Sederhana
+```{r}
+mdl_sederhana = lm(AQI ~ o3, data = aqi_train)
+summary(mdl_sederhana)
+```
+## uji asumsi asumsi regresi linear sederhana
+```{r}
+#homoskedastisitas
+bptest(mdl_sederhana)
+
+#Normalitas
+shapiro.test(residuals(mdl_sederhana))
+
+#Autocol
+dwtest(mdl_sederhana)
+```
+
+
+# Model koyck
+```{r}
+model.koyck = koyckDlm(x= aqi_train$o3, y =  aqi_train$AQI)
+summary(model.koyck)
+
+#AIC
+AIC(model.koyck)
+
+#BIC
+BIC(model.koyck) 
+```
+**Interpretasi Hasil**
+-   Berdasarkan summary, didapatkan model : 
+
+    $$ \hat{Y_t}=0.59835+0.26133X_t+0.41149_{t-1} $$
+
+    Koefisien $X_t$ (0.26133 ) signifikan, artinya nilai \$X\$ saat ini berpengaruh terhadap $Y$.
+
+-   Koefisien $Y_{t−1}$ (0.41149 ) juga signifikan. Ini adalah **estimasi untuk** $\lambda$. Nilai ini menunjukkan bahwa sekitar 41% dari efek di periode sebelumnya masih "terbawa" ke periode saat ini.
+
+## Peramalan dan akurasi model koyck
+```{r}
+fore.koyck <- forecast(model = model.koyck, x=aqi_test$o3, h=16)
+fore.koyck
+mape.koyck <- MAPE(fore.koyck$forecasts, aqi_test$AQI)
+mape.koyck #data test
+#akurasi data training
+GoF(model.koyck)
+```
+
+# Distributed Lag
+```{r}
+model.dlm = dlm(x = aqi_train$o3,y = aqi_train$AQI , q = 8)
+summary(model.dlm)
+AIC(model.dlm)
+BIC(model.dlm)
+```
+
+## Peramalan dan akurasi 
+```{r}
+#Peramalan dan akurasi 
+fore.dlm =forecast(model = model.dlm, x=aqi_test$o3, h=16)
+fore.dlm
+mape.dlm <- MAPE(fore.dlm$forecasts, aqi_test$AQI)
+mape.dlm
+#akurasi data training
+GoF(model.dlm)
+```
+
+## lag optimum
+```{r}
+finiteDLMauto(formula = AQI ~ o3,
+              data = data.frame(aqi_train), q.min = 1, q.max = 10,
+              model.type = "dlm", error.type = "AIC", trace = TRUE)
+
+model.dlm2 <- dlm(x = aqi_train$o3,y = aqi_train$AQI , q = 10)
+summary(model.dlm2)
+AIC(model.dlm2)
+BIC(model.dlm2)
+
+#Nyoba kalau 1 aja
+model.dlm3 <- dlm(x = aqi_train$o3,y = aqi_train$AQI , q = 1)
+summary(model.dlm3)
+AIC(model.dlm3)
+BIC(model.dlm3)
+```
+### Peramalan dan akurasi
+```{r}
+fore.dlm2 <- forecast(model = model.dlm2, x=aqi_test$o3, h=16)
+
+#akurasi data test
+mape.dlm2<- MAPE(fore.dlm2$forecasts, aqi_test$AQI)
+mape.dlm2
+
+fore.dlm3 <- forecast(model = model.dlm3, x=aqi_test$o3, h=16)
+
+#akurasi data test
+mape.dlm3<- MAPE(fore.dlm3$forecasts, aqi_test$AQI)
+mape.dlm3
+
+GoF(model.dlm2)
+GoF(model.dlm3)
+```
+#Hasil
+Model terbaik DLM diperoleh dengan lag 10. Hal ini sedikit berbeda dengan teori awal jika periode / cycle yang berpengaruh adalah 8
+
+# Model Autoregressive
+```{r}
+model.ardl <- ardlDlm(formula = AQI ~ o3,data = aqi_train,p = 1 , q = 1)
+summary(model.ardl)
+
+AIC(model.ardl)
+BIC(model.ardl)
+```
+## Peramalan dan akurasi
+```{r}
+fore.ardl <- forecast(model = model.ardl , x=aqi_test$o3, h=16)
+fore.ardl
+
+mape.ardl <- MAPE(fore.ardl$forecasts, aqi_test$AQI)
+mape.ardl
+
+GoF(model.ardl)
+```
+
+## Optimum
+```{r}
+model.ardl.opt <- ardlBoundOrders(data = data.frame(data_aqi), ic = "AIC", 
+                                  formula = AQI ~ o3 )
+model.ardl.opt
+
+
+min_p=c()
+for(i in 1:6){
+  min_p[i]=min(model.ardl.opt$Stat.table[[i]])
+}
+q_opt=which(min_p==min(min_p, na.rm = TRUE))
+p_opt=which(model.ardl.opt$Stat.table[[q_opt]] == 
+              min(model.ardl.opt$Stat.table[[q_opt]], na.rm = TRUE))
+data.frame("q_optimum" = q_opt, "p_optimum" = p_opt, 
+           "AIC"=model.ardl.opt$min.Stat)
+
+model.ardl2 <- ardlDlm(formula = AQI ~ o3, 
+                         data = aqi_train,p = 13, q = 2)
+summary(model.ardl2)
+```
+## peramalan dan akurasi optim
+```{r}
+fore.ardl2 <- forecast(model = model.ardl2, x=aqi_test$o3, h=16)
+fore.ardl2
+mape.ardl2 <- MAPE(fore.ardl$forecasts, aqi_test$AQI)
+mape.ardl2
+
+GoF(model.ardl2)
+```
+
+#Uji Diagnostik
+```{r}
+#koyck
+dwtest(model.koyck$model)
+bptest(model.koyck$model)
+shapiro.test(residuals(model.koyck$model))
+
+#dlm2
+dwtest(model.dlm2$model)
+bptest(model.dlm2$model)
+shapiro.test(residuals(model.dlm2$model))
+
+#ardl2
+dwtest(model.ardl2$model)
+bptest(model.ardl2$model)
+shapiro.test(residuals(model.ardl2$model))
+
+
+```
+**Hasil**
+Hanya model koyck yang tidak memenuhi asumsi homoskedastisitas karena p value bp test lebih kecil dari 0.05
+
+
+# Membandingkan model
+```{r}
+akurasi <- matrix(c(mape.koyck, mape.dlm2, mape.ardl2))
+row.names(akurasi)<- c("Koyck","DLM 2","Autoregressive 2")
+colnames(akurasi) <- c("MAPE")
+akurasi
+```
+# Plot
+```{r}
+par(mfrow=c(1,1))
+
+# urutkan data test berdasarkan O3 biar garis rapi
+urut = order(aqi_test$o3)
+
+plot(aqi_test$o3[urut], aqi_test$AQI[urut], type="b", pch=16,
+     col="black",
+     main="Perbandingan Aktual vs Prediksi",
+     xlab="O3 (ug/m3)", ylab="AQI")
+
+# Koyck
+lines(aqi_test$o3[urut], fore.koyck$forecasts[urut], col="red", lwd=2)
+points(aqi_test$o3[urut], fore.koyck$forecasts[urut], col="red", pch=1)
+
+# DLM
+lines(aqi_test$o3[urut], fore.dlm2$forecasts[urut], col="blue", lwd=2)
+points(aqi_test$o3[urut], fore.dlm2$forecasts[urut], col="blue", pch=2)
+
+# ARDL
+lines(aqi_test$o3[urut], fore.ardl2$forecasts[urut], col="green", lwd=2)
+points(aqi_test$o3[urut], fore.ardl2$forecasts[urut], col="green", pch=0)
+
+legend("topleft",
+       legend=c("Aktual","Koyck","DLM(2)","ARDL(2)"),
+       col=c("black","red","blue","green"),
+       lty=1, pch=c(16,1,2,0), cex=0.8)
+
+```
+#Kesimpulan
+Berdasarkan hasil Mape dan grafik di atas, menurut saya model terbaik untuk kasus ini adalah model ARDL 2 karena memiliki nilai MAPE terendah dan saat Gof() menghasilkan hasil yang baik. Selain itu dari visual plot di atas dapat dilihat (menurut saya) model ARDL 2 lah yang paling mendekati data aktual. model ardl 2 p =13 q = 2
+
