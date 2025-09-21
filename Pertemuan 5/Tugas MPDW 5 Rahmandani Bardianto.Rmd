@@ -1,0 +1,538 @@
+---
+title: "MPDW 5"
+author:
+- Rahmandani Bardianto G1401231029
+output:
+  html_document:
+    theme: yeti
+    toc: true
+    toc_float: true
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+# White Noise
+```{r}
+library(TSA)
+set.seed(1401231029)
+wn = rnorm(300)
+ts.plot(wn)
+
+par(mfrow = c(1, 2)) 
+acf(wn)
+acf(wn, xlim = c(1, 20))
+```
+
+# MA (2)
+```{r}
+teta1 = 0.4
+teta2= 0.6
+
+ma2 = numeric(300)
+```
+
+## Pembangkitan MA Manual
+```{r}
+ma2[1] = wn[1]
+ma2[2] = wn[2] + teta1 * wn[1]
+
+for (i in 3:300) {
+  ma2[i] = wn[i] + teta1 * wn[i-1] + teta2 * wn[i-2]
+}
+ma2_manual = ma2
+
+ts.plot(ma2, main="MA(2)")
+
+# ACF MA(2)
+par(mfrow=c(1,2))
+acf(ma2)
+acf(ma2, xlim=c(1,20))
+```
+
+
+## Pembangkitan MA "otomatis"
+```{r}
+ma2_auto = arima.sim(list(order=c(0,0,2), ma= c(teta1,teta2)), n=300,sd=1)
+ma2_auto
+
+ts.plot(ma2_auto, main = "MA(2) arima.sim ")
+
+par(mfrow = c(1, 2))
+acf(ma2_auto, main = "ACF MA(2)")
+acf(ma2_auto, xlim = c(1, 20), main = "ACF MA(2) ")
+```
+
+## Plot time series
+```{r}
+rng = range(c(ma2_manual, ma2_auto))
+par(mfrow = c(1,2), mar = c(4.5, 4.5, 4.8, 1))
+plot(ts(ma2_manual), type = "l", ylim = rng, xlab = "t", ylab = expression(Y[t]), main = "")
+title(main = "Time Series - MA(2) Manual", line = 2.2)
+abline(h = 0, lty = 3)
+
+plot(ts(ma2_auto), type = "l", ylim = rng, xlab = "t", ylab = expression(Y[t]), main = "")
+title(main = "Time Series - MA(2) arima.sim", line = 2.2)
+abline(h = 0, lty = 3)
+```
+
+## ACF
+```{r}
+par(mfrow = c(1,2), mar = c(4.5, 4.5, 4.8, 1))
+acf(ma2_manual, lag.max = 30, main = "")
+title(main = "ACF - MA(2) Manual", line = 2.2)
+acf(ma2_auto,   lag.max = 30, main = "")
+title(main = "ACF - MA(2) arima.sim", line = 2.2)
+```
+
+## Plot PACF
+```{r}
+par(mfrow = c(1,2), mar = c(4.5, 4.5, 4.8, 1))
+pacf(ma2_manual, lag.max = 30, main = "")
+title(main = "PACF - MA(2) Manual", line = 2.2)
+pacf(ma2_auto,   lag.max = 30, main = "")
+title(main = "PACF - MA(2) arima.sim", line = 2.2)
+```
+
+## Plot EACF
+```{r}
+cat("EACF (Manual) "); TSA::eacf(ma2_manual, ar.max = 7, ma.max = 7)
+cat("\nEACF (Auto)");   TSA::eacf(ma2_auto,   ar.max = 7, ma.max = 7)
+```
+***Identifikasi kestasioneran***
+1. ACF: spike signifikan hanya di lag 1–2, lalu cut-off
+2. PACF: tail-off (memudar) tanpa pola tren jangka panjang.
+3. EACF: segitiga o muncul paling awal di (p,q) = (0,2), konsisten dengan proses MA(2) yang kovarians-stasioner secara definisi.
+4. Plot time series ; Garis berfluktuasi di sekitar mean ≈ 0 tanpa tren naik/turun jangka panjang.
+Varians relatif konstan dari awal sampai akhir dan tidak ada pola musiman
+
+## Autocol
+```{r}
+y = if (exists("ma2")) as.numeric(ma2) else as.numeric(ma)
+n = length(y)
+
+# Y_{t-1}
+yt1  =y[2:n]
+yt_1 = y[1:(n-1)]
+
+# Y_{t-2}
+yt2  =y[3:n]
+yt_2 = y[1:(n-2)]
+
+# Y_{t-3}
+yt3  = y[4:n]
+yt_3 = y[1:(n-3)]
+
+
+rng = range(c(yt1,yt_1, yt2,yt_2, yt3,yt_3))
+
+# Scatterplot
+par(mfrow = c(1,3), mar = c(4,4,2,1))
+plot(yt_1, yt1, xlab = expression(Y[t-1]), ylab = expression(Y[t]),
+     main = expression(paste(Y[t], " vs ", Y[t-1])),
+     xlim = rng, ylim = rng, pch = 16, cex = 0.7)
+abline(h = 0, v = 0, lty = 3); legend("topleft", bty = "n",
+     legend = paste0("r = ", round(cor(yt1, yt_1), 3)))
+
+plot(yt_2, yt2, xlab = expression(Y[t-2]), ylab = expression(Y[t]),
+     main = expression(paste(Y[t], " vs ", Y[t-2])),
+     xlim = rng, ylim = rng, pch = 16, cex = 0.7)
+abline(h = 0, v = 0, lty = 3); legend("topleft", bty = "n",
+     legend = paste0("r = ", round(cor(yt2, yt_2), 3)))
+
+plot(yt_3, yt3, xlab = expression(Y[t-3]), ylab = expression(Y[t]),
+     main = expression(paste(Y[t], " vs ", Y[t-3])),
+     xlim = rng, ylim = rng, pch = 16, cex = 0.7)
+abline(h = 0, v = 0, lty = 3); legend("topleft", bty = "n",
+     legend = paste0("r = ", round(cor(yt3, yt_3), 3)))
+```
+
+
+```{r}
+# korelasi pasangan 
+rho1_emp = cor(y[2:n], y[1:(n-1)])   # lag 1
+rho2_emp = cor(y[3:n], y[1:(n-2)])   # lag 2
+rho3_emp = cor(y[4:n], y[1:(n-3)])   # lag 3
+
+# TEoritis
+theta1 = 0.4; theta2 = 0.6
+gamma0 = 1 + theta1^2 + theta2^2
+rho1_th = theta1 * (1 + theta2) / gamma0
+rho2_th = theta2 / gamma0
+rho3_th = 0
+
+
+hasil = data.frame(
+  lag = 1:3,
+  empiris_pair = c(rho1_emp, rho2_emp, rho3_emp),
+  teoritis     = c(rho1_th,  rho2_th,  rho3_th)
+)
+hasil
+```
+***Interpretasi***
+Semua selisih di atas masih dalam batas wajar → ACF sampel mendekati nilai teoritis, dan lag ≥3 ~ 0, sesuai pola cut-off MA(2).
+
+
+
+# AR (2)
+
+## Pembangkitan AR Manual
+```{r}
+set.seed(1401231029)
+n =300
+phi1 = 0.5
+phi2= 0.2
+
+#WN
+e = rnorm(n, mean = 0, sd = 1)  
+y = numeric(n)
+
+y[1] = rnorm(1)                 
+y[2] = 0.5*y[1] + rnorm(1)  
+
+
+for (t in 3:n) {
+  y[t] = phi1 * y[t-1] + phi2 * y[t-2] +  rnorm(1)
+}
+
+
+ar2_manual= y
+ar2_manual
+```
+
+## Pembangkitan AR arima.sims
+```{r}
+ar2_auto = arima.sim(model = list(order =c(2, 0, 0), ar= c(phi1, phi2)),
+                     n = n, sd = 1)
+ar2_auto
+```
+
+## Plot time series
+```{r}
+rng = range(c(ar2_manual, ar2_auto))
+par(mfrow = c(1, 2), mar = c(4,4,2,1))
+
+plot(ts(ar2_manual), type = "l", ylim = rng,
+     main = "AR(2) Manual", xlab= "t", ylab =expression(y[t]))
+abline(h = 0, lty = 3)
+
+plot(ts(ar2_auto), type = "l", ylim = rng,
+     main = "AR(2) arima.sim", xlab= "t", ylab = expression(y[t]))
+abline(h = 0, lty = 3)
+```
+
+## ACF
+```{r}
+par(mfrow = c(1,2), mar = c(4,4,2,1))
+acf(ar2_manual, lag.max = 30, main = "ACF AR(2) Manual")
+acf(ar2_auto,   lag.max = 30, main = "ACF AR(2) arima.sim ")
+
+```
+
+## PACF
+```{r}
+par(mfrow = c(1,2), mar = c(4.5, 4.5, 4.8, 1))
+pacf(ar2_manual, lag.max = 30, main = "PACF AR(2) Manual")
+pacf(ar2_auto,   lag.max = 30, main = "PACF AR(2) arima.sim")
+
+```
+
+## EACF
+```{r}
+
+cat("EACF: AR(2) Manual")
+eacf_manual = eacf(ar2_manual, ar.max = 7, ma.max = 7)
+
+cat("\nEACF: AR(2) arima.sim ")
+eacf_auto = eacf(ar2_auto, ar.max = 7, ma.max = 7)
+```
+***Identifikasi kestasioneran***
+1. Plot time series : berfluktuasi di sekitar mean tetap, varians relatif konstan, tak ada tren/musiman.
+2. ACF : tail-off (peluruhan bertahap), khas AR; tidak ada spike besar berkepanjangan.
+3. PACF : cut-off di lag 2 (spike signifikan di 1–2 lalu kecil), ciri AR(2) stasioner.
+4. EACF : segitiga o paling awal di (p,q)=(2,0) → AR murni orde 2.
+
+Maka stasioner
+
+## Scatter Plot
+```{r}
+
+
+plot_scatter_lags = function(y, judul = "AR(2)") {
+y = as.numeric(y)
+n = length(y)
+
+yt1 = y[2:n];   yt_1 = y[1:(n-1)]
+yt2 = y[3:n];   yt_2 = y[1:(n-2)]
+yt3 = y[4:n];   yt_3 = y[1:(n-3)]
+
+rng = range(c(yt1, yt_1, yt2, yt_2, yt3, yt_3))
+par(mfrow = c(1,3), mar = c(4,4,2,1))
+
+# lag-1
+plot(yt_1, yt1, xlab = expression(Y[t-1]), ylab = expression(Y[t]),
+       main = paste0(judul, ": ", expression(Y[t] %->% Y[t-1])),
+       xlim = rng, ylim = rng, pch = 16, cex = 0.7)
+  legend("topleft", bty = "n", legend = paste0("r = ", round(cor(yt1, yt_1), 3)))
+  abline(h = 0, v = 0, lty = 3)
+
+  # lag-2
+plot(yt_2, yt2, xlab = expression(Y[t-2]), ylab = expression(Y[t]),
+       main = paste0(judul, ": ", expression(Y[t] %->% Y[t-2])),
+       xlim = rng, ylim = rng, pch = 16, cex = 0.7)
+  legend("topleft", bty = "n", legend = paste0("r = ", round(cor(yt2, yt_2), 3)))
+  abline(h = 0, v = 0, lty = 3)
+
+  # lag-3
+plot(yt_3, yt3, xlab = expression(Y[t-3]), ylab = expression(Y[t]),
+       main = paste0(judul, ": ", expression(Y[t] %->% Y[t-3])),
+       xlim = rng, ylim = rng, pch = 16, cex = 0.7)
+  legend("topleft", bty = "n", legend = paste0("r = ", round(cor(yt3, yt_3), 3)))
+  abline(h = 0, v = 0, lty = 3)
+}
+
+i
+par(mfrow = c(2,3), mar = c(4,4,2,1))  
+# manual
+y = as.numeric(ar2_manual); n = length(y)
+yt1 = y[2:n]; yt_1 = y[1:(n-1)]
+yt2 = y[3:n]; yt_2 = y[1:(n-2)]
+yt3 = y[4:n]; yt_3 = y[1:(n-3)]
+rng = range(c(yt1, yt_1, yt2, yt_2, yt3, yt_3))
+plot(yt_1, yt1, xlab = expression(Y[t-1]), ylab = expression(Y[t]),
+     main = "Manual: Y_t vs Y_{t-1}", xlim = rng, ylim = rng, pch = 16, cex = 0.7); abline(h=0,v=0,lty=3)
+plot(yt_2, yt2, xlab = expression(Y[t-2]), ylab = expression(Y[t]),
+     main = "Manual: Y_t vs Y_{t-2}", xlim = rng, ylim = rng, pch = 16, cex = 0.7); abline(h=0,v=0,lty=3)
+plot(yt_3, yt3, xlab = expression(Y[t-3]), ylab = expression(Y[t]),
+     main = "Manual: Y_t vs Y_{t-3}", xlim = rng, ylim = rng, pch = 16, cex = 0.7); abline(h=0,v=0,lty=3)
+
+# auto
+y = as.numeric(ar2_auto); n = length(y)
+yt1 = y[2:n]; yt_1 = y[1:(n-1)]
+yt2 = y[3:n]; yt_2 = y[1:(n-2)]
+yt3 = y[4:n]; yt_3 = y[1:(n-3)]
+rng = range(c(yt1, yt_1, yt2, yt_2, yt3, yt_3))
+plot(yt_1, yt1, xlab = expression(Y[t-1]), ylab = expression(Y[t]),
+     main = "Auto: Y_t vs Y_{t-1}", xlim = rng, ylim = rng, pch = 16, cex = 0.7); abline(h=0,v=0,lty=3)
+plot(yt_2, yt2, xlab = expression(Y[t-2]), ylab = expression(Y[t]),
+     main = "Auto: Y_t vs Y_{t-2}", xlim = rng, ylim = rng, pch = 16, cex = 0.7); abline(h=0,v=0,lty=3)
+plot(yt_3, yt3, xlab = expression(Y[t-3]), ylab = expression(Y[t]),
+     main = "Auto: Y_t vs Y_{t-3}", xlim = rng, ylim = rng, pch = 16, cex = 0.7); abline(h=0,v=0,lty=3)
+```
+
+
+## Autocol 
+```{r}
+acf_empiris_123 = function(y) {
+  y = as.numeric(y); n = length(y)
+  c(
+    cor(y[2:n], y[1:(n-1)]),   # rho_1
+    cor(y[3:n], y[1:(n-2)]),   # rho_2
+    cor(y[4:n], y[1:(n-3)])    # rho_3
+  )
+}
+
+
+rho1_th = phi1 / (1 - phi2)
+rho2_th = phi1 * rho1_th + phi2
+rho3_th = phi1 * rho2_th + phi2 * rho1_th
+rho_th  = c(rho1_th, rho2_th, rho3_th)
+
+rho_manual = acf_empiris_123(ar2_manual)
+rho_auto   = acf_empiris_123(ar2_auto)
+
+
+hasil = data.frame(
+  lag = 1:3,
+  empiris_manual = rho_manual,
+  empiris_auto   = rho_auto,
+  teoritis       = rho_th
+)
+print(round(hasil, 4))
+```
+***Interpretasi***
+1. Pola AR(2): rho1 > rho2 > rho3 > 0 
+2. Nilai empiris (auto) sangat dekat dengan teoretis
+3. Empiris (manual) sedikit lebih rendah. Selisih ~0.11 (≈ 1.96/sqrt(300)) = masih dalam galat sampel.
+
+
+# ARMA(2,2)
+```{r}
+n = 300
+phi1_arma = 0.5
+phi2_arma = 0.2
+theta1_arma = 0.4
+theta2_arma = 0.6
+
+```
+
+## ARMA Manual
+```{r}
+arma_sim_manual = function(n, ma = numeric(0), ar = numeric(0), sd = 1) {
+  p = length(ar); q = length(ma)
+  m = max(p, q)
+  e = rnorm(n + m, sd = sd)      # white noise
+  y = numeric(n + m)
+
+  # rekursi: y_t = sum(phi_i * y_{t-i}) + e_t + sum(theta_j * e_{t-j})
+  for (t in (m + 1):(n + m)) {
+    ar_part = if (p > 0) sum(ar * y[(t-1):(t-p)]) else 0
+    ma_part = if (q > 0) sum(ma * e[(t-1):(t-q)]) else 0
+    y[t] = ar_part + e[t] + ma_part
+  }
+  return(tail(y, n))             # kembalikan tepat n observasi
+}
+
+arma22_manual = arma_sim_manual(
+  n = n,
+  ma = c(theta1_arma, theta2_arma),
+  ar = c(phi1_arma,   phi2_arma),
+  sd = 1
+)
+arma22_manual
+```
+
+
+## ARMA Arima.sim
+```{r}
+arma22_auto = arima.sim(
+  model = list(order = c(2,0,2),
+               ar = c(phi1_arma,   phi2_arma),
+               ma = c(theta1_arma, theta2_arma)),
+  n = n, sd = 1
+)
+arma22_auto
+```
+
+##Plot time series
+```{r}
+ttl_manual = "ARMA(2,2) Manual"
+ttl_auto   = "ARMA(2,2) arima.sim"
+
+
+rng = range(c(arma22_manual, arma22_auto))
+par(mfrow = c(1,2), mar = c(4,4,2,1))
+plot(ts(arma22_manual), type = "l", ylim = rng,
+     main = ttl_manual, xlab = "t", ylab = expression(y[t])); abline(h=0, lty=3)
+plot(ts(arma22_auto),   type = "l", ylim = rng,
+     main = ttl_auto,   xlab = "t", ylab = expression(y[t])); abline(h=0, lty=3)
+```
+
+## ACF
+```{r}
+par(mfrow = c(1,2), mar = c(4,4,2,1))
+acf(arma22_manual, lag.max = 30, main = paste("ACF -", ttl_manual))
+acf(arma22_auto,   lag.max = 30, main = paste("ACF -", ttl_auto))
+```
+
+## PACF
+```{r}
+
+par(mfrow = c(1,2), mar = c(4.5, 4.5, 4.8, 1), oma = c(0,0,0,0))
+# Manual
+pacf(arma22_manual, lag.max = 30, main = "")
+title(main = paste("PACF -", if (exists("ttl_manual")) ttl_manual else "ARMA(2,2) Manual"),
+      line = 2.2, cex.main = 1)
+# Auto
+pacf(arma22_auto,   lag.max = 30, main = "")
+title(main = paste("PACF -", if (exists("ttl_auto")) ttl_auto else "ARMA(2,2) arima.sim"),
+      line = 2.2, cex.main = 1)
+
+```
+
+```{r}
+cat(" EACF (Manual)")
+TSA::eacf(arma22_manual, ar.max = 7, ma.max = 7)
+cat("\nEACF (Auto) ")
+TSA::eacf(arma22_auto,   ar.max = 7, ma.max = 7)
+```
+***Interpretasi***
+1. Plot time series :berfluktuasi di sekitar mean tetap, varians relatif konstan, tak ada tren/musiman jelas.
+2. ACF: sama-sama tail-off (pelan memudar), indikasi proses stasioner (ciri ARMA).
+3. PACF: juga tail-off; tidak ada cut-off khas AR murni/MA murni → konsisten ARMA.
+4. EACF: “o” paling dini di sekitar (p,q) = (2,2) untuk auto dan manual
+Maka stasioner
+
+
+## Scatter plot
+```{r}
+plot_lag_scatter = function(y, label = "") {
+  y = as.numeric(y); n = length(y)
+  yt1 = y[2:n];   y_1 = y[1:(n-1)]
+  yt2 = y[3:n];   y_2 = y[1:(n-2)]
+  yt3 = y[4:n];   y_3 = y[1:(n-3)]
+  rng = range(c(yt1,y_1, yt2,y_2, yt3,y_3))
+
+  par(mfrow = c(1,3), mar = c(4,4,2.2,1))
+  plot(y_1, yt1, xlab = expression(Y[t-1]), ylab = expression(Y[t]),
+       main = paste0(label, ": Y[t] vs Y[t-1]"),
+       xlim = rng, ylim = rng, pch = 16, cex = 0.7)
+  legend("topleft", bty = "n", legend = paste0("r = ", round(cor(yt1, y_1), 3)))
+  abline(h = 0, v = 0, lty = 3)
+
+  plot(y_2, yt2, xlab = expression(Y[t-2]), ylab = expression(Y[t]),
+       main = paste0(label, ": Y[t] vs Y[t-2]"),
+       xlim = rng, ylim = rng, pch = 16, cex = 0.7)
+  legend("topleft", bty = "n", legend = paste0("r = ", round(cor(yt2, y_2), 3)))
+  abline(h = 0, v = 0, lty = 3)
+
+  plot(y_3, yt3, xlab = expression(Y[t-3]), ylab = expression(Y[t]),
+       main = paste0(label, ": Y[t] vs Y[t-3]"),
+       xlim = rng, ylim = rng, pch = 16, cex = 0.7)
+  legend("topleft", bty = "n", legend = paste0("r = ", round(cor(yt3, y_3), 3)))
+  abline(h = 0, v = 0, lty = 3)
+}
+
+
+par(mfrow = c(2,3), mar = c(4,4,2.2,1))
+plot_lag_scatter(arma22_manual, "Manual")
+plot_lag_scatter(arma22_auto,   "Auto")
+```
+
+## Autocol
+```{r}
+
+acf_empiris = function(y, k = 3) {
+  y = as.numeric(y); n = length(y)
+  sapply(1:k, function(h) cor(y[(h+1):n], y[1:(n-h)]))
+}
+
+
+acf_teoritis = function(phi, theta, k = 3) {
+ 
+  stats::ARMAacf(ar = phi, ma = theta, lag.max = k)[-1]
+}
+
+K = 3  
+rho_manual = acf_empiris(arma22_manual, k = K)
+rho_auto   = acf_empiris(arma22_auto,   k = K)
+rho_theory = acf_teoritis(c(phi1_arma, phi2_arma),
+                          c(theta1_arma, theta2_arma), k = K)
+
+n = length(arma22_manual)
+batas_kira2 = rep(1.96 / sqrt(n), K)   
+
+hasil = data.frame(
+  lag = 1:K,
+  empiris_manual = round(rho_manual, 4),
+  empiris_auto   = round(rho_auto,   4),
+  teoritis       = round(rho_theory, 4),
+  selisih_auto   = round(rho_auto - rho_theory,   4),
+  selisih_manual = round(rho_manual - rho_theory, 4),
+  batas_approx   = round(batas_kira2, 4)
+)
+
+print(hasil, row.names = FALSE)
+```
+***Interpretasi***
+1. Polanya sesuai ARMA(2,2) ρ1 >ρ2 >ρ3 >0
+2. Empiris (auto): (0.8603, 0.7659, 0.5698) → sangat dekat; selisih kecil (≤ 0.0233) dan < ±0.1132 (batas kira-kira).
+3. Empiris (manual): (0.8101, 0.6698, 0.3997) → cenderung lebih rendah; lag-3 selisih ≈ 0.147 > 0.1132
+Kesimpulan: data auto konsisten kuat dengan model; data manual juga sesuai pola tetapi sedikit bias
+
+
