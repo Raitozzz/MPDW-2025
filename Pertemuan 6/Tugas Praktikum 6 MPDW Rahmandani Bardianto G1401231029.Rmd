@@ -1,0 +1,290 @@
+---
+title: "MPDW 6"
+author: "Rahmandani"
+date: "2025-10-01"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+#Import
+```{r}
+data_btc1 = read.csv("C:/Users/PC/Downloads/Harga btc_kelompok 10.csv")
+
+data_btc= data_btc1[829:1656,]
+head(data_btc)
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+library(lubridate)
+library(dplyr)
+```
+
+#Plot time series
+```{r}
+
+btc = data_btc |>
+  transmute(
+    tanggal = mdy(date),         
+    tanggal = coalesce(tanggal, as.Date(date)),
+    harga   = as.numeric(price)
+  ) |>
+  filter(!is.na(tanggal), !is.na(harga)) |>
+  arrange(tanggal) |>
+  distinct(tanggal, .keep_all = TRUE) |>
+  mutate(indeks = row_number())
+
+ggplot(btc, aes(x = indeks, y = harga)) +
+  geom_line(linewidth = 0.6) +
+  scale_x_continuous(
+    breaks = seq(100, nrow(btc), by = 100),  
+    minor_breaks = NULL,
+    limits = c(1, nrow(btc))
+  ) +
+  labs(x = "Nomor Urut", y = "Harga (USD)", title = "Harga Harian BTC (X = Nomor Urut)") +
+  theme_minimal(base_size = 12)
+
+
+```
+##Hasil Plot time series
+Tidak stasioner dalam ragam karena memiliki lebar pita yang cenderung tidak sama
+
+#Plot ACF
+```{r}
+acf(btc$harga)
+```
+##Hasil ACF
+Berdasarkan plot ACF, terlihat bahwa plot ACF pada data tersebut menurun secara perlahan (tails off slowly) yang menandakan data tidak stasioner dalam rataan
+#Uji ADF
+```{r}
+tseries::adf.test(btc$harga)
+```
+##Hasil ADF
+Karena p-value > 0.05 maka tak tolak H0 dan menandakan bahwa data tidak stasioner dalam rataan
+
+#box-cox
+```{r}
+library(MASS)
+
+# Box-Cox 
+bc <- boxcox(
+  harga ~ indeks,
+  data   = btc,
+  lambda = seq(-2, 2, by = 0.0001)  
+)
+
+# Lambda optimum
+lambda <- bc$x[which.max(bc$y)]
+lambda
+
+# Selang kepercayaan 95%
+ci_lambda <- bc$x[bc$y > max(bc$y) - 0.5 * qchisq(0.95, 1)]
+ci_lower  <- min(ci_lambda)
+ci_upper  <- max(ci_lambda)
+
+c(Lambda = round(lambda, 6),
+  Batas_Bawah = round(ci_lower, 6),
+  Batas_Atas  = round(ci_upper, 6))
+
+boxcoxF = function(x, lam) if (abs(lam) < 1e-8) log(x) else (x^lam - 1) / lam
+
+btcBox = btc %>%
+  mutate(
+    hargaBox = boxcoxF(harga, lambda),
+    diff1    = dplyr::lag(hargaBox, default = NA),
+    hargaBoxDiff = c(NA, diff(hargaBox, lag = 1))  
+  )
+
+#  Plot deret hasil Box-Cox 
+ggplot(btcBox, aes(x = indeks, y = hargaBox)) +
+  geom_line(linewidth = 0.6) +
+  labs(title = paste0("BTC setelah Box-Cox (λ ≈ ", round(lambda, 3), ")"),
+       x = "Nomor Urut", y = "Harga (skala Box-Cox)") +
+  theme_minimal(base_size = 12)
+
+# -ACF & PACF 
+par(mfrow = c(1,2))
+acf(btcBox$hargaBox, na.action = na.omit, main = "ACF: hargaBox")
+pacf(btcBox$hargaBox, na.action = na.omit, main = "PACF: hargaBox")
+par(mfrow = c(1,1))
+
+#  Uji ADF 
+adf_level = adf.test(na.omit(btcBox$hargaBox), alternative = "stationary")
+print(adf_level)
+
+
+```
+##Hasil boxcox
+Karena selang tersebut tidak memuat nilai λ = 1, maka dapat disimpulkan bahwa data tidak stasioner dalam ragam sehingga diperlukan transformasi.
+
+##Hasil Setelah transformasi Boxcox
+Setelah melakukan transformasi boxcox data masih menunjukan bahwa data tidak stasioner dalam ragam dan rataan yang bisa diketahui dengan melihad adf test, plot time series dan acf
+
+##Differensing hasil transformasi boxcox
+```{r}
+
+seriDiff = diff(btcBox$hargaBox, differences = 1)
+
+
+btcBoxDiff = data.frame(
+  indeks       = btc$indeks[-1],  
+  hargaBoxDiff = seriDiff
+)
+
+
+library(ggplot2)
+ggplot(btcBoxDiff, aes(indeks, hargaBoxDiff)) +
+  geom_line(linewidth = 0.6) +
+  scale_x_continuous(breaks = seq(100, max(btcBoxDiff$indeks), by = 100), minor_breaks = NULL) +
+  labs(title = "BTC – Beda Pertama pada Skala Box–Cox",
+       x = "Nomor Urut", y = "Beda Pertama (skala Box–Cox)") +
+  theme_minimal(base_size = 12)
+
+
+par(mfrow = c(1,2))
+acf(btcBoxDiff$hargaBoxDiff, main = "ACF: beda pertama (skala Box–Cox)")
+pacf(btcBoxDiff$hargaBoxDiff, main = "PACF: beda pertama (skala Box–Cox)")
+par(mfrow = c(1,1))
+
+
+library(tseries)
+adf_diff = adf.test(btcBoxDiff$hargaBoxDiff, alternative = "stationary")
+print(adf_diff)
+
+
+if (adf_diff$p.value <= 0.05) {
+  cat("KESIMPULAN: Beda pertama pada skala Box–Cox sudah stasioner (p ≤ 0.05).\n")
+} else {
+  cat("KESIMPULAN: Belum stasioner; pertimbangkan differencing tambahan / komponen musiman.\n")
+}
+```
+
+```{r}
+
+length(btcBox$hargaBox)          
+sum(is.na(btcBox$hargaBox))      
+length(btcBox$hargaBoxDiff)      
+sum(is.na(btcBox$hargaBoxDiff))
+
+x = btcBox$hargaBox
+x = x[is.finite(x)]           
+
+if (length(x) < 2) stop("Data terlalu sedikit untuk differencing (butuh ≥ 2 observasi).")
+
+seriDiff = diff(x, differences = 1)
+
+
+
+
+y_pos = seriDiff + 10         
+if (min(y_pos, na.rm = TRUE) <= 0) y_pos = y_pos - min(y_pos, na.rm = TRUE) + 1e-6
+
+if (length(y_pos) < 2) stop("Setelah pembersihan, seri untuk cek lambda masih < 2 observasi.")
+
+df = data.frame(y_pos = y_pos, idx = seq_along(y_pos))
+bc = MASS::boxcox(y_pos ~ idx, data = df, lambda = seq(-2, 2, by = 0.0001), plotit = FALSE)
+
+lambda  = bc$x[which.max(bc$y)]
+cutoff  = max(bc$y) - 0.5 * qchisq(0.95, 1)
+ci_95   = range(bc$x[bc$y >= cutoff])
+
+c(Lambda = round(lambda, 6),
+  Batas_Bawah = round(ci_95[1], 6),
+  Batas_Atas  = round(ci_95[2], 6),
+  N = length(y_pos))
+
+
+```
+###Hasil Boxcox +differensing
+Uji adf, plot acf, dan lambda menunjukan bahwa data termasuk stasioner setelah diterapkan transformasi boxcox+diferensing ordo 1
+
+#Diferencing data saja
+```{r}
+
+dtRg_diff1 <- diff(btc$harga, differences = 1)
+indeks     <- seq_along(dtRg_diff1)
+
+
+mask_pos <- dtRg_diff1 > 0
+if (sum(mask_pos) < 10) warning("Nilai positif terlalu sedikit untuk profiling lambda yang stabil.")
+
+bc <- boxcox(
+  dtRg_diff1[mask_pos] ~ indeks[mask_pos],
+  lambda = seq(0, 5, by = 0.001),
+  plotit = FALSE
+)
+lambda_hat <- bc$x[which.max(bc$y)]
+ci_lambda  <- bc$x[bc$y > max(bc$y) - 0.5 * qchisq(0.95, 1)]
+cat("Lambda (cek saja) =", round(lambda_hat, 6),
+    "; CI95%: [", round(min(ci_lambda), 6), ",", round(max(ci_lambda), 6), "]\n")
+
+
+btcDiff <- data.frame(
+  indeks    = indeks,
+  hargaDiff = dtRg_diff1
+)
+
+
+ggplot(btcDiff, aes(indeks, hargaDiff)) +
+  geom_line(linewidth = 0.6) +
+  scale_x_continuous(breaks = seq(100, max(btcDiff$indeks), by = 100), minor_breaks = NULL) +
+  labs(title = "BTC – Beda Pertama (tanpa transformasi)",
+       x = "Nomor Urut", y = "Beda Pertama") +
+  theme_minimal(base_size = 12)
+
+
+par(mfrow = c(1,2))
+acf(btcDiff$hargaDiff, main = "ACF: beda pertama")
+pacf(btcDiff$hargaDiff, main = "PACF: beda pertama")
+par(mfrow = c(1,1))
+
+adf_res <- adf.test(btcDiff$hargaDiff, alternative = "stationary")
+print(adf_res)
+
+# Ringkas
+if (adf_res$p.value <= 0.05) {
+  cat("KESIMPULAN: Beda pertama sudah stasioner (p ≤ 0.05).\n")
+} else {
+  cat("KESIMPULAN: Beda pertama belum stasioner (p > 0.05). Pertimbangkan differencing tambahan / musiman.\n")
+}
+
+```
+
+```{r}
+#CEK boxcox lambda
+
+
+beda1   = diff(btc$harga, differences = 1)
+indeks  = seq_along(beda1)
+
+
+beda1geser = beda1 + 220
+
+
+bc = boxcox(
+  beda1geser ~ indeks,
+  lambda = seq(-2, 2, by = 0.001),
+  plotit = FALSE
+)
+
+
+lambda  = bc$x[which.max(bc$y)]
+batas   = max(bc$y) - 0.5 * qchisq(0.95, 1)
+ci      = range(bc$x[bc$y >= batas])
+
+c(
+  Lambda = round(lambda, 6),
+  CI95_bawah = round(ci[1], 6),
+  CI95_atas  = round(ci[2], 6)
+)
+
+```
+##Hasil diferensing saja
+Berdasarkan uji adf data sudah stasioner dalam rataan namun jika melihat nilai lambda yang belum memuat 1 maka belum stasioner dalam ragam.
+
+
+#Hasil
+Data btc pada awalnya tidak stasioner dalam ragam dan rataan. Setelah menerapkan transformasi boxcox dan melakukan differensing ordo 1 didapatkan data yang stasioner dalam ragam dan rataan. Saat mencoba melakukan differensing saja data hanya stasioner dalam rataan dan tidak dalam ragam
+
