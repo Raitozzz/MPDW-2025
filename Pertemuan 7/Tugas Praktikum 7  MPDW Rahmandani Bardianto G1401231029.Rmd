@@ -1,0 +1,405 @@
+---
+title: "MPDW 7"
+author: "Rahmandani Bardianto G1401231029"
+date: "2025-10-03"
+output:
+  html_document:
+    theme: yeti
+    toc: true
+    toc_depth: 3
+    number_sections: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    code_folding: show
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Import dan split
+```{r}
+
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+library(lubridate)
+library(dplyr)
+data_btc1 = read.csv("C:/Users/PC/Downloads/Harga btc_kelompok 10.csv")
+
+data_btc= data_btc1[829:1656,]
+head(data_btc)
+
+n_total <- nrow(data_btc)
+n_train <- floor(0.8 * n_total)
+
+data_btc_train <- data_btc[1:n_train, ]
+data_btc_test  <- data_btc[(n_train + 1):n_total, ]
+
+data_btc_train <- data_btc_train %>% mutate(indeks_split = row_number())
+data_btc_test  <- data_btc_test  %>% mutate(indeks_split = row_number())
+
+```
+
+# Plot time series
+```{r}
+
+
+btc_train <- data_btc_train |>
+  transmute(
+    tanggal = mdy(date),
+    tanggal = coalesce(tanggal, as.Date(date)),
+    harga   = as.numeric(price)
+  ) |>
+  filter(!is.na(tanggal), !is.na(harga)) |>
+  arrange(tanggal) |>
+  distinct(tanggal, .keep_all = TRUE) |>
+  mutate(indeks = row_number())
+
+ggplot(btc_train, aes(x = indeks, y = harga)) +
+  geom_line(linewidth = 0.6) +
+  scale_x_continuous(
+    breaks = seq(100, nrow(btc_train), by = 100),
+    minor_breaks = NULL,
+    limits = c(1, nrow(btc_train))
+  ) +
+  labs(
+    x = "Nomor Urut",
+    y = "Harga (USD)",
+    title = "Harga Harian BTC – TRAIN (X = Nomor Urut)"
+  ) +
+  theme_minimal(base_size = 12)
+
+```
+## Hasil Plot time series
+Tidak stasioner dalam ragam karena memiliki lebar pita yang cenderung tidak sama
+
+# Plot ACF
+```{r}
+
+acf(data_btc_train$price)
+
+```
+## Hasil ACF
+Berdasarkan plot ACF, terlihat bahwa plot ACF pada data tersebut menurun secara perlahan (tails off slowly) yang menandakan data tidak stasioner dalam rataan
+# Uji ADF
+```{r}
+tseries::adf.test(data_btc_train$price)
+```
+## Hasil ADF
+Karena p-value > 0.05 maka tak tolak H0 dan menandakan bahwa data tidak stasioner dalam rataan
+
+# box-cox
+```{r}
+
+btc_train <- data_btc_train |>
+  transmute(
+    tanggal = mdy(date),
+    tanggal = coalesce(tanggal, as.Date(date)),
+    harga   = as.numeric(price)
+  ) |>
+  filter(!is.na(tanggal), !is.na(harga)) |>
+  arrange(tanggal) |>
+  distinct(tanggal, .keep_all = TRUE) |>
+  mutate(indeks = row_number())
+
+
+bc <- boxcox(
+  harga ~ indeks,
+  data   = btc_train,
+  lambda = seq(-2, 2, by = 0.0001)
+)
+
+
+lambda <- bc$x[which.max(bc$y)]
+ci_lambda <- bc$x[bc$y > max(bc$y) - 0.5 * qchisq(0.95, 1)]
+ci_lower  <- min(ci_lambda)
+ci_upper  <- max(ci_lambda)
+
+c(Lambda = round(lambda, 6),
+  Batas_Bawah = round(ci_lower, 6),
+  Batas_Atas  = round(ci_upper, 6))
+
+
+boxcoxF <- function(x, lam) if (abs(lam) < 1e-8) log(x) else (x^lam - 1) / lam
+
+boxcox_awal <- btc_train |>
+  mutate(
+    hargaBox     = boxcoxF(harga, lambda),
+    diff1        = dplyr::lag(hargaBox, default = NA),
+    hargaBoxDiff = c(NA, diff(hargaBox, lag = 1))
+  )
+
+
+ggplot(boxcox_awal, aes(x = indeks, y = hargaBox)) +
+  geom_line(linewidth = 0.6) +
+  labs(title = paste0("BTC TRAIN setelah Box–Cox (λ ≈ ", round(lambda, 3), ")"),
+       x = "Nomor Urut", y = "Harga (skala Box–Cox)") +
+  theme_minimal(base_size = 12)
+
+
+par(mfrow = c(1,2))
+acf(boxcox_awal$hargaBox, na.action = na.omit, main = "ACF: hargaBox (TRAIN)")
+pacf(boxcox_awal$hargaBox, na.action = na.omit, main = "PACF: hargaBox (TRAIN)")
+par(mfrow = c(1,1))
+
+
+tseries::adf.test(na.omit(boxcox_awal$hargaBox), alternative = "stationary")
+
+# Seri hasil transform (level)
+z <- na.omit(boxcox_awal$hargaBox)
+
+# Geser tipis supaya > 0 (Box-Cox mensyaratkan y > 0)
+m     <- min(z)
+shift <- if (m <= 0) -m + 1e-6 else 0
+z_pos <- z + shift
+idx   <- seq_along(z_pos)
+
+# Plot profil Box–Cox (hanya plot)
+bc2 <- boxcox(
+  z_pos ~ idx,
+  lambda = seq(-2, 2, by = 0.0005),  # grid halus
+  plotit = TRUE                      # tampilkan plot
+)
+title(main = sprintf("Profil Box–Cox pada hargaBox (shift = %.6f)", shift))
+```
+## Hasil boxcox
+Karena selang tersebut  memuat nilai λ = 1, maka dapat disimpulkan bahwa data stasioner dalam ragam sehingga diperlukan.
+
+##Hasil Setelah transformasi Boxcox
+Setelah melakukan transformasi boxcox data masih menunjukan bahwa data tidak stasioner dalam rataan yang bisa diketahui dengan melihat adf test, plot time series dan acf
+
+# Differensing hasil transformasi boxcox
+```{r}
+
+seriDiff <- diff(boxcox_awal$hargaBox, differences = 1)
+
+btcBoxDiff <- data.frame(
+  indeks       = boxcox_awal$indeks[-1],  
+  hargaBoxDiff = seriDiff
+)
+
+
+library(ggplot2)
+ggplot(btcBoxDiff, aes(indeks, hargaBoxDiff)) +
+  geom_line(linewidth = 0.6) +
+  scale_x_continuous(
+    breaks = seq(100, max(btcBoxDiff$indeks), by = 100),
+    minor_breaks = NULL
+  ) +
+  labs(
+    title = "BTC TRAIN – Beda Pertama pada Skala Box–Cox",
+    x = "Nomor Urut", y = "Beda Pertama (skala Box–Cox)"
+  ) +
+  theme_minimal(base_size = 12)
+
+
+par(mfrow = c(1,2))
+acf(btcBoxDiff$hargaBoxDiff, main = "ACF: beda pertama (skala Box–Cox)")
+pacf(btcBoxDiff$hargaBoxDiff, main = "PACF: beda pertama (skala Box–Cox)")
+par(mfrow = c(1,1))
+
+
+library(tseries)
+adf_diff <- tseries::adf.test(na.omit(btcBoxDiff$hargaBoxDiff), alternative = "stationary")
+print(adf_diff)
+
+
+if (adf_diff$p.value <= 0.05) {
+  cat("KESIMPULAN: Beda pertama pada skala Box–Cox sudah stasioner (p ≤ 0.05).\n")
+} else {
+  cat("KESIMPULAN: Belum stasioner; pertimbangkan differencing tambahan / komponen musiman.\n")
+}
+
+
+```
+### Hasil Boxcox +differensing
+Uji adf, plot acf, dan lambda menunjukan bahwa data termasuk stasioner setelah diterapkan transformasi boxcox+diferensing ordo 1
+
+```{r}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+library(forecast)
+library(TSA)
+library(TTR)
+library(aTSA)
+library(graphics)
+```
+
+```{r}
+
+fix_train <- btcBoxDiff
+fix_train$indeks <- seq_len(nrow(fix_train))
+fix_train$indeks <- seq_len(nrow(fix_train))
+names(fix_train)[names(fix_train) == "hargaBoxDiff"] <- "harga"
+
+head(fix_train)
+```
+
+# Eksplorasi
+```{r}
+acf(fix_train$harga)
+pacf(fix_train$harga)
+eacf(fix_train$harga)
+plot(fix_train$harga,
+     col = "navyblue",
+     lwd = 1,
+     type = "o",
+     xlab = "Time",
+     ylab = "Data")
+```
+##Hasil
+Berdasarkan eksplorasi didapatkan  calon model arima dengan lag 
+model_a = (1,1,1)
+model_b = (0,1,1)
+model_c = (0,1,2)
+model_d = (1,1,2)
+model_e = (2,1,1)
+model_f = (2,1,2)
+
+Diferensing sudah dilakukan pada data jadi di 0 kan
+# Pendugaan Parameter
+## Model a
+```{r}
+#model_a
+model_a = Arima(fix_train$harga, order =c(1,0,1), method = "ML")
+summary(model_a)
+lmtest::coeftest(model_a)
+```
+## model b
+```{r}
+model_b = Arima(fix_train$harga, order = c(0,0,1), method ="ML")
+summary(model_b)
+lmtest::coeftest(model_b)
+```
+## Model c
+```{r}
+model_c = Arima(fix_train$harga, order = c(0,0,2), method ="ML")
+summary(model_c)
+lmtest::coeftest(model_c)
+```
+## Model d
+
+```{r}
+model_d = Arima(fix_train$harga, order = c(1,0,2), method ="ML")
+summary(model_d)
+lmtest::coeftest(model_d)
+```
+## Model e
+```{r}
+model_e = Arima(fix_train$harga, order = c(2,0,1), method ="ML")
+summary(model_e)
+lmtest::coeftest(model_e)
+```
+## Model f
+```{r}
+model_f = Arima(fix_train$harga, order = c(2,0,2), method ="ML")
+summary(model_f)
+lmtest::coeftest(model_f)
+```
+###Hasil pendugaan parameter
+Berdasarkan pendugaan parameter di atas dengan nilai aic dan signifikansi lag, maka dipilih model ARIMA (2,1,2) / model_f
+
+# Analisis Sisaan
+## Eksplorasi sisaan
+```{r}
+sisaan = model_f$residuals
+par(mfrow=c(2,2))
+car::qqPlot(sisaan)
+plot(sisaan)
+acf(sisaan)
+pacf(sisaan)
+```
+
+
+
+```{r}
+ks.test(sisaan,"pnorm") 
+Box.test(sisaan, type = "Ljung") 
+Box.test((sisaan)^2, type = "Ljung")
+t.test(sisaan, mu = 0, conf.level = 0.95) 
+```
+# Overfitting 
+```{r}
+model3.da=Arima(fix_train$harga, order=c(3,0,3),method="ML")
+summary(model3.da) 
+lmtest::coeftest(model3.da) 
+sisa = model3.da$residuals
+ks.test(sisa,"pnorm") 
+Box.test(sisa, type = "Ljung") 
+Box.test((sisa)^2, type = "Ljung")
+t.test(sisa, mu = 0, conf.level = 0.95) 
+```
+
+## Hasil overfit
+Karena model hasil overfitting sudah termasuk di dalam model tentatif dan hasilnya tidak lebih baik, maka model terbaik yang dipilih adalah ARIMA(2,1,2) dilanjutkan dengan peramalan.
+
+
+
+
+# Forecasting
+```{r}
+library(forecast)
+library(dplyr)
+library(ggplot2)
+
+# --- HORIZON ---
+h <- nrow(data_btc_test)
+
+# --- FORECAST di Δ(Box–Cox) ---
+ramalan_f <- forecast::forecast(model_f, h = h)
+print(ramalan_f)
+autoplot(ramalan_f) + ggtitle("Forecast (Δ Box–Cox) dari model_f")
+
+data.ramalan.f  <- ramalan_f$mean
+hasil.forc.Diff <- as.numeric(data.ramalan.f)
+
+# --- TITIK AWAL LEVEL (Box–Cox) dari TRAIN ---
+stopifnot(exists("boxcox_awal"), "hargaBox" %in% names(boxcox_awal))
+pt_last <- tail(boxcox_awal$hargaBox, 1)   # << penting: didefinisikan di sini
+
+# --- INVERSE DIFFERENCING -> LEVEL Box–Cox ---
+hasil_box_level <- diffinv(hasil.forc.Diff, differences = 1) + pt_last
+fc_box_level    <- hasil_box_level[-1]
+stopifnot(length(fc_box_level) == h)
+
+# --- INVERSE BOX–COX -> HARGA ASLI ---
+stopifnot(exists("lambda"))
+invBoxcox <- function(y, lam) if (abs(lam) < 1e-8) exp(y) else (lam*y + 1)^(1/lam)
+pred_price <- invBoxcox(fc_box_level, lambda)
+
+# --- AKTUAL TEST & PERBANDINGAN ---
+aktual_price <- as.numeric(data_btc_test$price)
+perbandingan.f <- data.frame(
+  indeks         = data_btc_test$indeks_split,
+  Aktual         = aktual_price,
+  Hasil_Forecast = pred_price
+)
+
+print(head(perbandingan.f, 10))
+accuracy(ts(pred_price), ts(aktual_price))
+
+# --- PLOT OVERLAY DI SKALA ASLI ---
+ggplot(perbandingan.f, aes(indeks)) +
+  geom_line(aes(y = Aktual), size = 0.6) +
+  geom_line(aes(y = Hasil_Forecast), linetype = "dashed", size = 0.6) +
+  labs(title = "BTC – Actual vs Forecast (skala harga asli, TEST)",
+       x = "Indeks (TEST)", y = "Harga (USD)") +
+  theme_minimal(base_size = 12)
+
+
+```
+
+
+# Kesimpulan & sedikit rekomendasi selanjutnya
+Transformasi Box–Cox + differencing berhasil membuat seri stasioner. ARIMA(2,1,2) memenuhi rata-rata residu = 0 tetapi melanggar normalitas dan homoskedastisitas. Ramalan dibuat di Δ(Box–Cox), lalu inverse differencing dan inverse Box–Cox ke harga asli.meski kesalahan persentase moderat, ACF1 tinggi dan Theil’s U > 1 menunjukkan performa lebih lemah daripada model naif (random walk).
+
+
+Rekomendasi
+Tangani volatilitas: pasang GARCH(1,1) (atau EGARCH/GJR) di atas mean ARIMA dengan Student-t innovations.
+Periksa musiman mingguan (s=7): jika ada spike residu pada lag 7, uji SARIMA
